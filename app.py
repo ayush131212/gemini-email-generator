@@ -1,106 +1,82 @@
-# ==============================================================================
-# FILE: app.py (Correct and Secure Version)
-# PURPOSE: Main application file for the AI Email Generator.
-# ==============================================================================
-
-# 1. IMPORT LIBRARIES
+import os
 import streamlit as st
 import google.generativeai as genai
-import os
+from dotenv import load_dotenv
 
-# 2. CONFIGURE THE PAGE AND API KEY
+# --- Page Configuration ---
 st.set_page_config(
-    page_title="Gemini Email Generator",
-    page_icon="📧",
+    page_title="AI Product Guesser",
+    page_icon="🔮",
     layout="centered"
 )
 
-# This code securely gets the API key from Streamlit's secrets manager.
-# It looks for a secret named "GOOGLE_API_KEY".
+# --- API Configuration ---
+# Load secrets for local development from .env file
+load_dotenv()
+
+# Use Streamlit's secrets management for deployment
 try:
-    api_key = st.secrets["GOOGLE_API_KEY"]
-    genai.configure(api_key=api_key)
-except KeyError:
-    st.error("API Key not found. Please add your GOOGLE_API_KEY to the Streamlit secrets.")
-    st.stop()
+    # For Streamlit Community Cloud
+    GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
+except (KeyError, FileNotFoundError):
+    # For local development
+    GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
+# Configure the Gemini API
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
+    gemini_model = genai.GenerativeModel('gemini-pro')
+else:
+    st.error("Gemini API key not found. Please set it in your secrets.")
+    st.stop() # Stop the app if the key is not available
 
-# 3. DEFINE THE AI FUNCTION
-def generate_email(recipient, sender, purpose, tone, key_points):
+# --- The Core Gemini Function ---
+
+def generate_product_list_with_gemini(query):
+    """Asks Gemini to act as a product search engine and generate HTML."""
+
+    # This prompt is the core of the entire application.
+    # It tells Gemini to guess sellers, products, prices, and generate search links.
+    prompt = f"""
+    You are an expert product search engine. A user is searching for "{query}".
+    Your task is to generate a list of 5 plausible product listings from major online retailers
+    who you estimate would sell this product a lot.
+
+    Follow these rules STRICTLY:
+    1.  Based on your knowledge, identify 5 major online retailers (like Amazon, Best Buy, Walmart, Target, etc.) that likely sell "{query}".
+    2.  For each retailer, invent a realistic product title and an estimated price.
+    3.  Generate a valid SEARCH URL for the product on the retailer's website. For example, for Amazon, the URL should be like `https://www.amazon.com/s?k=sony+wh-1000xm5`. For Best Buy, `https://www.bestbuy.com/site/searchpage.jsp?st=sony+wh-1000xm5`.
+    4.  Format the entire output as a block of HTML. Use inline CSS for styling.
+    5.  For each product, create a `div` with `style="background-color: #f9f9f9; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 1rem; padding: 1rem;"`.
+    6.  Inside the card, put the product title in an `<h3>` tag.
+    7.  Below the title, add a `<p>` tag with the seller's name and the estimated price (e.g., "Seller: Amazon, Estimated Price: $349.99").
+    8.  Create a link (`<a>` tag) that says "Search on Seller's Site". The href MUST be the search URL you generated. It must open in a new tab (`target="_blank"`). Style it like a button with `style="display: inline-block; padding: 8px 16px; background-color: #0b57d0; color: white; text-decoration: none; border-radius: 5px; font-weight: bold;"`
+    9.  Do NOT include any other text, explanation, or code block formatting like ```html. Only output the raw HTML content starting from the first `div`.
     """
-    Uses the Gemini API to generate an email based on provided details.
-    """
-    model = genai.GenerativeModel('gemini-1.5-flash')
-
-    prompt_template = f"""
-    You are a professional email writing assistant. Your task is to generate a high-quality email.
-
-    **Email Details:**
-    - **To:** {recipient}
-    - **From:** {sender}
-    - **Tone:** {tone}
-    - **Purpose:** {purpose}
-    - **Key Points to Include:**
-    {key_points}
-
-    **Instructions:**
-    1. Generate a relevant and concise subject line. Do not use a placeholder like "[Subject]".
-    2. Write the email body, making sure it flows well and incorporates all key points.
-    3. The email should start with a proper greeting and end with an appropriate closing.
-    4. The final output must be ONLY the email (Subject, Body, Closing). Do not add any extra notes.
-
-    **Generated Email:**
-    """
-
+    
     try:
-        response = model.generate_content(prompt_template)
+        response = gemini_model.generate_content(prompt)
         return response.text
     except Exception as e:
-        return f"An error occurred: {e}"
+        st.error(f"An error occurred while contacting the AI model: {e}")
+        return None
 
+# --- Streamlit User Interface ---
 
-# 4. CREATE THE STREAMLIT USER INTERFACE
-st.title("📧 AI Email Generator")
-st.write("Fill in the details below to have Gemini AI craft your email.")
+st.title("🔮 AI Product Guesser")
+st.markdown("Enter a product, and Gemini will guess 5 places that might sell it and generate search links.")
 
-with st.form("email_generator_form"):
-    st.header("Email Information")
+with st.form(key="search_form"):
+    product_query = st.text_input("Product Name", placeholder="e.g., Nintendo Switch OLED")
+    submit_button = st.form_submit_button(label="Ask Gemini")
 
-    col1, col2 = st.columns(2)
-    with col1:
-        sender_name = st.text_input("Your Name", placeholder="e.g., Jane Doe")
-    with col2:
-        recipient_name = st.text_input("Recipient's Name", placeholder="e.g., John Smith")
-
-    purpose = st.text_input("What is the purpose of this email?", placeholder="e.g., Follow up on our recent meeting")
-
-    tone = st.selectbox(
-        "Select the desired tone:",
-        ("Professional", "Friendly", "Formal", "Casual", "Urgent")
-    )
-
-    key_points = st.text_area(
-        "What key points should be included? (one per line)",
-        height=150,
-        placeholder="- Thank them for their time\n- Confirm the agreed-upon project deadline\n- Ask for the meeting notes"
-    )
-
-    submit_button = st.form_submit_button("✨ Generate Email")
-
-
-# 5. HANDLE FORM SUBMISSION
-if submit_button:
-    if not all([sender_name, recipient_name, purpose, key_points]):
-        st.warning("Please fill in all the fields.")
-    else:
-        with st.spinner("Generating your email..."):
-            generated_email = generate_email(
-                recipient=recipient_name,
-                sender=sender_name,
-                purpose=purpose,
-                tone=tone,
-                key_points=key_points
-            )
-            st.success("Email generated!")
-            st.subheader("Your Generated Email:")
-            st.text_area("You can copy the text below", generated_email, height=300)
+if submit_button and product_query:
+    with st.spinner("🧠 Gemini is thinking..."):
+        # Call our single function to get the HTML from Gemini
+        formatted_html = generate_product_list_with_gemini(product_query)
+        
+        if formatted_html:
+            st.markdown("### Here's what Gemini found:")
+            st.markdown(formatted_html, unsafe_allow_html=True)
+        else:
+            st.warning("The AI could not generate a response. Please try again.")

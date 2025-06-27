@@ -30,13 +30,13 @@ st.set_page_config(
 def load_api_key():
     try:
         # Ideal for Streamlit Community Cloud deployment
-        genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
+        genai.configure(api_key=st.secrets["AIzaSyBW56boEAbSgHllcnJW0xlG3DEaeE4MU90"])
         st.sidebar.success("API key loaded from Streamlit secrets.", icon="✅")
     except (KeyError, FileNotFoundError):
         # Fallback for local development
         try:
             load_dotenv()  # Load environment variables from .env file
-            api_key = os.getenv("GOOGLE_API_KEY")
+            api_key = os.getenv("AIzaSyBW56boEAbSgHllcnJW0xlG3DEaeE4MU90")
             if not api_key:
                 st.sidebar.error("API key not found in .env file.", icon="❌")
                 st.stop()
@@ -81,7 +81,7 @@ def generate_email(recipient_name, sender_name, purpose, tone, key_points):
     except Exception as e:
         return f"An error occurred while generating the email: {e}"
 
-# --- STREAMLIT WEB APP INTERFACE ---
+
 
 st.title("📧 AI Email Generator")
 st.write("Fill in the details below and let Gemini draft the perfect email for you.")
